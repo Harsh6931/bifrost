@@ -9,9 +9,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useApiData } from "@/hooks/use-api-data";
+import { demoRequests } from "@/lib/demo-data";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import type { RequestRow, RequestListResponse } from "@/lib/types";
-import { WidgetEmpty, WidgetError, WidgetSkeleton } from "@/components/dashboard/widget-states";
+import { WidgetSkeleton } from "@/components/dashboard/widget-states";
 
 const PER_PAGE = 20;
 
@@ -79,8 +80,10 @@ function ExplanationPanel({ request }: { request: RequestRow }) {
 export function RequestsTable() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const { data, error, loading, refetch } = useApiData<RequestListResponse>(
-    `/api/requests?page=${page}&per_page=${PER_PAGE}`
+  const { data, loading } = useDashboardData<RequestListResponse>(
+    `/api/requests?page=${page}&per_page=${PER_PAGE}`,
+    () => demoRequests(page, PER_PAGE),
+    (payload) => payload.requests.length === 0,
   );
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PER_PAGE)) : 1;
@@ -95,12 +98,8 @@ export function RequestsTable() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {loading ? (
+        {loading || !data ? (
           <WidgetSkeleton height={320} />
-        ) : error ? (
-          <WidgetError message={error} onRetry={refetch} />
-        ) : !data || data.requests.length === 0 ? (
-          <WidgetEmpty hint="No routed requests yet. Run npm run seed or send traffic through the gateway." />
         ) : (
           <div className="space-y-3">
             <div className="overflow-x-auto">
@@ -133,20 +132,33 @@ export function RequestsTable() {
                         <td className="max-w-72 truncate py-2 pr-4">
                           {request.prompt_preview ?? request.prompt_hash}
                         </td>
-                        <td className="py-2 pr-4 whitespace-nowrap">
+                        <td className="py-2 pr-4 font-mono text-xs whitespace-nowrap">
                           {request.chosen_model.split("/").pop()}
                         </td>
                         <td className="py-2 pr-4 text-right tabular-nums">
                           {formatUsd(request.actual_cost_usd)}
                         </td>
-                        <td className="py-2 pr-4 text-right tabular-nums">
+                        <td
+                          className="py-2 pr-4 text-right tabular-nums"
+                          style={
+                            (request.savings_usd ?? 0) > 0
+                              ? { color: "var(--chart-bifrost)" }
+                              : undefined
+                          }
+                        >
                           {formatUsd(request.savings_usd)}
                         </td>
                         <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums text-muted-foreground">
                           {formatLatency(request.latency_ms)}
                         </td>
                         <td className="py-2 text-right">
-                          {request.cache_hit ? "hit" : "—"}
+                          {request.cache_hit ? (
+                            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] tracking-wide text-muted-foreground uppercase">
+                              hit
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                       {expandedId === request.id ? (
