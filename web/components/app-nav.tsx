@@ -17,7 +17,10 @@ export function AppNav() {
   return (
     <header className="border-b bg-background">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link href="/playground" className="text-sm font-semibold tracking-tight">
+        <Link
+          href="/playground"
+          className="font-serif text-lg font-semibold tracking-tight"
+        >
           Bifrost
         </Link>
         <nav className="flex items-center gap-1">
