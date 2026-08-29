@@ -1,4 +1,5 @@
 import { CostQualityScatter } from "@/components/dashboard/cost-quality-scatter";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { ModelMixChart } from "@/components/dashboard/model-mix-chart";
 import { ModelRegistryTable } from "@/components/dashboard/model-registry-table";
 import { RequestsTable } from "@/components/dashboard/requests-table";
@@ -7,21 +8,34 @@ import { StatsTiles } from "@/components/dashboard/stats-tiles";
 
 export default function DashboardPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Cost, quality and savings across every routed request.
-        </p>
-      </div>
+    <div className="space-y-8">
+      <DashboardHeader />
       <StatsTiles />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SavingsChart />
-        <ModelMixChart />
-      </div>
-      <CostQualityScatter />
-      <RequestsTable />
-      <ModelRegistryTable />
+
+      <section className="space-y-4">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          Where the money went
+        </h2>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <SavingsChart />
+          <ModelMixChart />
+        </div>
+        <CostQualityScatter />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          Traffic
+        </h2>
+        <RequestsTable />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          Configuration
+        </h2>
+        <ModelRegistryTable />
+      </section>
     </div>
   );
 }
