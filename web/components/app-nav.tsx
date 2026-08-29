@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/playground", label: "Playground" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/playground/classic", label: "Classic" },
 ] as const;
 
 export function AppNav() {
@@ -32,7 +33,9 @@ export function AppNav() {
         <nav className="flex items-center gap-1">
           {links.map((link) => {
             const active =
-              pathname === link.href || pathname.startsWith(`${link.href}/`);
+              link.href === "/playground"
+                ? pathname === "/playground"
+                : pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
