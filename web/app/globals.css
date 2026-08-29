@@ -23,6 +23,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-chart-bifrost: var(--chart-bifrost);
+  --color-chart-baseline: var(--chart-baseline);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -67,11 +71,19 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Model tiers, cheapest to most premium. Order is meaningful: the pie and
+     the scatter both read left-to-right as "cheap -> expensive". */
+  --chart-1: oklch(0.64 0.13 195);
+  --chart-2: oklch(0.62 0.14 162);
+  --chart-3: oklch(0.68 0.14 92);
+  --chart-4: oklch(0.63 0.16 48);
+  --chart-5: oklch(0.55 0.17 298);
+  /* Semantic pair for any Bifrost-vs-baseline comparison. */
+  --chart-bifrost: oklch(0.60 0.14 162);
+  --chart-baseline: oklch(0.60 0.17 25);
+  /* Brand accent — the bridge. */
+  --brand: oklch(0.55 0.17 275);
+  --brand-foreground: oklch(0.985 0 0);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -103,11 +115,16 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.45 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Brighter and less saturated than light mode — dark grounds eat chroma. */
+  --chart-1: oklch(0.76 0.13 195);
+  --chart-2: oklch(0.75 0.14 162);
+  --chart-3: oklch(0.82 0.14 92);
+  --chart-4: oklch(0.74 0.15 48);
+  --chart-5: oklch(0.68 0.16 298);
+  --chart-bifrost: oklch(0.75 0.14 162);
+  --chart-baseline: oklch(0.70 0.16 25);
+  --brand: oklch(0.68 0.15 275);
+  --brand-foreground: oklch(0.18 0 0);
   --sidebar: oklch(0.18 0 0);
   --sidebar-foreground: oklch(0.93 0 0);
   --sidebar-primary: oklch(0.93 0 0);
