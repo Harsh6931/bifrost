@@ -1,13 +1,24 @@
+use std::time::Instant;
+
+use axum::body::Body;
 use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde_json::json;
+use bytes::Bytes;
+use serde_json::{json, Value};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::auth::RequireApiKey;
 use crate::error::GatewayError;
-use crate::openai::ChatCompletionRequest;
+use crate::openai::{
+    completion_to_sse, prompt_policy_hash, prompt_preview, reconstruct_from_sse,
+    ChatCompletionRequest,
+};
 use crate::providers::LlmProvider;
+use crate::telemetry::{self, Outcome};
 use crate::AppState;
 
 pub async fn chat_completions(
@@ -29,17 +40,44 @@ pub async fn chat_completions(
             .into_response());
     }
 
-    if req.stream {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": {
-                    "message": "streaming is not supported yet; set stream=false",
-                    "type": "invalid_request_error"
-                }
-            })),
+    let want_stream = req.stream;
+    let mode = headers
+        .get("x-bifrost-mode")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("balanced")
+        .to_string();
+    let lambda: f64 = headers
+        .get("x-bifrost-lambda")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.5);
+    let hash = prompt_policy_hash(&req.messages, &mode, lambda);
+    let preview = prompt_preview(&req.messages);
+    let started = Instant::now();
+
+    req.model = Some(state.default_model.clone());
+
+    if let Some(cached) = state.cache.get(&hash).await {
+        let chosen = cached
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or(&state.default_model)
+            .to_string();
+        telemetry::record(
+            &state,
+            hash,
+            preview,
+            mode,
+            lambda as f32,
+            Outcome {
+                chosen_model: chosen,
+                body: cached.clone(),
+                cache_hit: true,
+                latency_ms: started.elapsed().as_millis() as i32,
+            },
         )
-            .into_response());
+        .await;
+        return Ok(respond_cached(want_stream, cached));
     }
 
     if !state.openrouter.is_configured() {
@@ -55,86 +93,129 @@ pub async fn chat_completions(
             .into_response());
     }
 
-    // 1. Resolve prompt from the last user message
-    let prompt = req
-        .messages
-        .last()
-        .map(|m| match &m.content {
-            serde_json::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        })
-        .unwrap_or_default();
+    if want_stream {
+        return proxy_stream(state, req, hash, preview, mode, lambda, started).await;
+    }
 
-    // 2. Resolve Bifrost policy settings from request headers
-    let mode = headers
-        .get("x-bifrost-mode")
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("balanced")
-        .to_string();
+    req.stream = false;
+    let (status, body) = state.openrouter.chat(&req).await?;
+    if status.is_success() {
+        let chosen = body
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or(&state.default_model)
+            .to_string();
+        telemetry::record(
+            &state,
+            hash,
+            preview,
+            mode,
+            lambda as f32,
+            Outcome {
+                chosen_model: chosen,
+                body: body.clone(),
+                cache_hit: false,
+                latency_ms: started.elapsed().as_millis() as i32,
+            },
+        )
+        .await;
+    }
+    Ok((status, Json(body)).into_response())
+}
 
-    let lambda_val: f64 = headers
-        .get("x-bifrost-lambda")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0.5);
+fn respond_cached(want_stream: bool, body: Value) -> Response {
+    if want_stream {
+        let sse = completion_to_sse(&body);
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "text/event-stream")
+            .header(CACHE_CONTROL, "no-cache")
+            .body(Body::from(sse))
+            .unwrap_or_else(|_| Json(body).into_response())
+    } else {
+        Json(body).into_response()
+    }
+}
 
-    // Default candidates list matching models_registry.json
-    let candidates = vec![
-        "openai/gpt-5.5".to_string(),
-        "anthropic/claude-sonnet-4.6".to_string(),
-        "google/gemini-2.5-pro".to_string(),
-        "deepseek/deepseek-r1".to_string(),
-        "openai/gpt-5-mini".to_string(),
-        "qwen/qwen3.7-flash".to_string(),
-    ];
+async fn proxy_stream(
+    state: AppState,
+    mut req: ChatCompletionRequest,
+    hash: String,
+    preview: String,
+    mode: String,
+    lambda: f64,
+    started: Instant,
+) -> Result<Response, GatewayError> {
+    req.stream = true;
+    let upstream = state.openrouter.send(&req).await?;
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
-    // 3. Make request to Python ML Router to choose the optimal candidate
-    let route_payload = json!({
-        "prompt": prompt,
-        "candidates": candidates,
-        "policy": {
-            "mode": mode,
-            "lambda": lambda_val,
-            "max_cost_usd": 0.05
+    if !status.is_success() {
+        let body: Value = upstream.json().await.map_err(|err| {
+            GatewayError::Upstream(format!("openrouter returned non-json: {err}"))
+        })?;
+        return Ok((status, Json(body)).into_response());
+    }
+
+    let content_type = upstream
+        .headers()
+        .get(CONTENT_TYPE)
+        .cloned()
+        .unwrap_or_else(|| HeaderValue::from_static("text/event-stream"));
+
+    let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(32);
+    tokio::spawn(async move {
+        let mut acc = Vec::new();
+        let mut upstream = upstream;
+        loop {
+            match upstream.chunk().await {
+                Ok(Some(chunk)) => {
+                    acc.extend_from_slice(&chunk);
+                    if tx.send(Ok(chunk)).await.is_err() {
+                        break;
+                    }
+                }
+                Ok(None) => break,
+                Err(err) => {
+                    let _ = tx.send(Err(std::io::Error::other(err))).await;
+                    break;
+                }
+            }
+        }
+        drop(tx);
+
+        if let Some(body) = reconstruct_from_sse(&acc) {
+            let chosen = body
+                .get("model")
+                .and_then(Value::as_str)
+                .unwrap_or(&state.default_model)
+                .to_string();
+            telemetry::record(
+                &state,
+                hash,
+                preview,
+                mode,
+                lambda as f32,
+                Outcome {
+                    chosen_model: chosen,
+                    body,
+                    cache_hit: false,
+                    latency_ms: started.elapsed().as_millis() as i32,
+                },
+            )
+            .await;
+        } else {
+            tracing::warn!("could not reconstruct completion from SSE; skipping cache/log");
         }
     });
 
-    let chosen_model = match state
-        .http
-        .post(format!("{}/route", state.ml_router_url))
-        .json(&route_payload)
-        .send()
-        .await
-    {
-        Ok(res) => {
-            if res.status().is_success() {
-                if let Ok(res_body) = res.json::<serde_json::Value>().await {
-                    res_body
-                        .get("chosen")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| state.default_model.clone())
-                } else {
-                    state.default_model.clone()
-                }
-            } else {
-                tracing::warn!("ML Router returned error status: {}. Failing open to default model.", res.status());
-                state.default_model.clone()
-            }
-        }
-        Err(err) => {
-            tracing::warn!("Failed to communicate with ML Router: {}. Failing open to default model.", err);
-            state.default_model.clone()
-        }
-    };
-
-    tracing::info!(%chosen_model, "routed request");
-
-    req.model = Some(chosen_model);
-    req.stream = false;
-
-    let (status, body) = state.openrouter.chat(&req).await?;
-    Ok((status, Json(body)).into_response())
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, content_type)
+        .header(CACHE_CONTROL, "no-cache")
+        .body(Body::from_stream(ReceiverStream::new(rx)))
+        .map_err(|err| GatewayError::Upstream(err.to_string()))?)
 }
 
 pub async fn route_preview(
@@ -142,7 +223,6 @@ pub async fn route_preview(
     _auth: RequireApiKey,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<Response, GatewayError> {
-    // Forward the route preview request directly to the Python ML Router
     let res = state
         .http
         .post(format!("{}/route", state.ml_router_url))

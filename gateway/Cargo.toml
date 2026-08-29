@@ -5,10 +5,16 @@ edition = "2024"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["json", "tokio", "macros"] }
+bytes = "1.11.1"
 dotenvy = "0.15.7"
+reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rust_decimal = { version = "1.39.0", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.10.9"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "json"] }
 tokio = { version = "1.53.1", features = ["full"] }
+tokio-stream = "0.1.17"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
+uuid = { version = "1.18.1", features = ["v4"] }
