@@ -2,7 +2,7 @@
 
 **An intelligent LLM router that picks the cheapest model that still answers well.**
 
-Status: pre-implementation · Last updated: 2026-08-29 · Team: 4 (1 Rust, 1 AI/ML, 2 full-stack)
+Status: pre-implementation · Last updated: 2026-08-29
 
 ---
 
@@ -77,7 +77,7 @@ Not a fine-tuning platform. Not a prompt optimizer. Not a general LLM proxy with
                                └─────────────┘
 ```
 
-**Why this split:** the ML service is a separate process so the Rust dev and the ML dev are never blocked on each other — both code against the `/route` JSON contract from hour one. The localhost hop costs ~1ms against LLM calls measured in seconds.
+**Why this split:** the ML service is a separate process so gateway and routing work are never blocked on each other — both sides code against the `/route` JSON contract from hour one. The localhost hop costs ~1ms against LLM calls measured in seconds.
 
 **Why OpenRouter as the only upstream:** one API key, one request shape, every model, and it reports actual generation cost. Writing adapters for OpenAI + Google + Anthropic + DeepSeek separately is a full day of work worth zero demo points. Keep a `LlmProvider` trait so a direct provider can be added later.
 
@@ -187,7 +187,7 @@ CREATE TABLE response_cache (
 
 ### 5.7 API contracts
 
-**Agree on these before anyone writes code.** They are what let four people work in parallel — everyone stubs the other side and integrates later.
+**Agree on these before anyone writes code.** They are what let the components be built in parallel — each side stubs the other and integrates later.
 
 ```jsonc
 // ── Gateway → ML service ──────────────────────────
@@ -258,13 +258,13 @@ bifrost/
 
 | Layer | Choice | Why |
 |---|---|---|
-| Gateway | Rust, axum, tokio, reqwest, sqlx | Team has a Rust dev; credible "gateway" story |
+| Gateway | Rust, axum, tokio, reqwest, sqlx | Low-overhead concurrent I/O; credible "gateway" story |
 | Upstream | OpenRouter | One key, all models, reports real cost |
 | Embeddings | `fastembed` + `bge-small-en-v1.5` (384-d) | Local, ~5ms, free — a router shouldn't make an API call to save money |
 | Predictor | k-NN (numpy) → LightGBM | Explains itself; works with small data |
 | ML service | FastAPI + uvicorn, `uv` for env | Fast to build, unblocks parallel work |
 | DB | Postgres on Neon | One store for relational + logs; zero setup |
-| Web | Next.js 15, TS, Tailwind, shadcn/ui, Recharts | Two full-stack devs, fastest path to a good demo |
+| Web | Next.js 15, TS, Tailwind, shadcn/ui, Recharts | Fastest path to a polished playground + dashboard |
 | Deploy | Vercel (web), Fly.io (gateway + ML) | Dockerfile deploys, generous free tiers |
 
 **Deliberately skipped:** Redis, vector DB, real auth, provider failover, multi-tenancy. Each is a real product need and none of them earn a hackathon point.
@@ -277,9 +277,9 @@ bifrost/
 
 Estimates assume a ~36-hour hackathon. Adjust the multiplier, keep the ordering — it's dependency-driven.
 
-### Phase 0 — Foundation · ~3h · everyone
+### Phase 0 — Foundation · ~3h
 
-The only phase where the whole team works together. Ends when four people can code without talking to each other.
+The one phase that has to happen together. Ends when every component can be built without coordination.
 
 - [ ] Agree on the `/route` request + response JSON, paste it into `packages/types`
 - [ ] Create monorepo skeleton with all four directories
@@ -291,13 +291,13 @@ The only phase where the whole team works together. Ends when four people can co
 - [ ] Each service returns `200 {"status":"ok"}` on `/health`
 - [ ] Push to GitHub, branch protection off, agree on branch naming
 
-**Exit:** four services boot, DB has tables and seeded models, everyone has the contract.
+**Exit:** all services boot, DB has tables and seeded models, the contract is agreed.
 
 ### Phase 1 — Vertical slice · ~9h
 
 Build the dumbest possible version of everything, end to end. **No intelligence yet.** Nobody optimizes their component until a prompt can travel the whole path and come back.
 
-**Rust dev**
+**Gateway**
 - [ ] axum server, `/health`, tracing subscriber, config from env
 - [ ] `POST /v1/chat/completions` accepting OpenAI's request schema
 - [ ] Bearer token check against a static env var
@@ -307,20 +307,20 @@ Build the dumbest possible version of everything, end to end. **No intelligence 
 - [ ] Insert a `requests` row with actual tokens, cost, latency
 - [ ] **Verify: `openai` Python SDK works against it with only `base_url` changed**
 
-**ML dev**
+**Router ML**
 - [ ] FastAPI skeleton, `/health`, `/route` matching the contract
 - [ ] Stub `/route`: return cheapest enabled model, `pred_quality: 0.5`, fake explanation
 - [ ] Download RouterBench, open it in a notebook, document the real schema
 - [ ] Write the loader → normalized `(prompt, model, quality, cost)` table
 - [ ] Get `fastembed` running, embed 100 prompts, confirm shape and timing
 
-**Full-stack A**
+**Playground**
 - [ ] Next.js app, Tailwind, shadcn init, layout shell + nav
 - [ ] Playground page: prompt box, mode selector, submit
 - [ ] API route proxying to the gateway (browser never holds the key)
 - [ ] Render the response + chosen model badge
 
-**Full-stack B**
+**Dashboard**
 - [ ] DB client + typed queries against `requests`
 - [ ] `/api/stats` returning totals: requests, spend, savings, model mix
 - [ ] Dashboard page with four stat tiles wired to real data
@@ -332,7 +332,7 @@ Build the dumbest possible version of everything, end to end. **No intelligence 
 
 Now make it actually route.
 
-**ML dev** (heaviest phase — protect their time)
+**Router ML** (heaviest workstream this phase)
 - [ ] Embed the full corpus, persist as `.npy` + id index
 - [ ] Implement k-NN: cosine over the in-memory matrix, top-k, per-model quality average
 - [ ] Load prices from `model_registry`, implement `cost(m)`
@@ -343,7 +343,7 @@ Now make it actually route.
 - [ ] Held-out eval: cost reduction % and quality retention % vs. always-premium
 - [ ] **Write those two numbers down — they go on the demo slide**
 
-**Rust dev**
+**Gateway**
 - [ ] SSE streaming passthrough from OpenRouter to client
 - [ ] Exact-match response cache (hash prompt+policy), record `cache_hit`
 - [ ] Compute and store `baseline_cost_usd` + `savings_usd` per request
@@ -352,13 +352,13 @@ Now make it actually route.
 - [ ] Graceful degradation: if the ML service is down, route to a default model and log it
 - [ ] Structured request logging
 
-**Full-stack A**
+**Playground**
 - [ ] Explanation panel: chosen model, why, neighbor prompts, savings on this call
 - [ ] λ slider calling `/v1/route/preview` on change — decision updates live, no spend
 - [ ] Score comparison view: all candidates with quality/cost/score bars
 - [ ] Streaming response rendering
 
-**Full-stack B**
+**Dashboard**
 - [ ] Cumulative savings chart (Bifrost vs. always-premium) over time
 - [ ] Model distribution chart
 - [ ] Cost/quality scatter, one point per request
@@ -407,7 +407,7 @@ Now make it actually route.
 | RouterBench schema isn't what we expect | High — blocks Phase 2 | Open it in a notebook during **Phase 1**, not Phase 2. Fallback: LLM-as-judge on ~500 prompts. |
 | Router picks cheap models that visibly fail on stage | Fatal | Rehearse with the exact demo prompts. Tune λ. Cache the demo path. |
 | Live API flakiness during the demo | Fatal | Replay mode + pre-warmed cache. Build it, don't hope. |
-| ML dev becomes the bottleneck in Phase 2 | High | Stub `/route` ships in Phase 1 so nobody waits. Pull a full-stack dev onto the eval script if it slips. |
+| Router ML becomes the bottleneck in Phase 2 | High | Stub `/route` ships in Phase 1 so nothing waits on it. Shift help onto the eval script if it slips. |
 | Integration hell at hour 30 | High | The Phase 1 vertical slice exists precisely to force integration early. |
 | Time sunk into auth / multi-tenancy | Medium | Explicitly out of scope. One static bearer token. |
 
