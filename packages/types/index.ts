@@ -97,6 +97,23 @@ export interface ModelMixEntry {
   pct_of_requests: number;
 }
 
+export interface TimeseriesPoint {
+  day: string;
+  requests: number;
+  spend_usd: number;
+  baseline_usd: number;
+  savings_usd: number;
+  cumulative_spend_usd: number;
+  cumulative_baseline_usd: number;
+  cumulative_savings_usd: number;
+}
+
+export interface StatsTimeseriesResponse {
+  days: TimeseriesPoint[];
+  period_start: string;
+  period_end: string;
+}
+
 export interface RequestListResponse {
   requests: RequestRow[];
   total: number;
