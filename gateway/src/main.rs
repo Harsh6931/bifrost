@@ -18,6 +18,8 @@ pub(crate) struct AppState {
     pub api_key: String,
     pub default_model: String,
     pub openrouter: OpenRouter,
+    pub http: reqwest::Client,
+    pub ml_router_url: String,
 }
 
 #[tokio::main]
@@ -43,6 +45,9 @@ async fn main() {
     let default_model =
         std::env::var("DEFAULT_MODEL").unwrap_or_else(|_| "openai/gpt-5-mini".into());
     let openrouter_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
+    
+    let ml_router_url = std::env::var("ML_ROUTER_URL")
+        .unwrap_or_else(|_| "http://localhost:8000".into());
 
     let http = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
@@ -52,10 +57,14 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .route("/chat/completions", post(chat::chat_completions))
+        .route("/v1/chat/completions", post(chat::chat_completions))
+        .route("/v1/route/preview", post(chat::route_preview))
         .with_state(AppState {
             api_key,
             default_model,
-            openrouter: OpenRouter::new(http, openrouter_key),
+            openrouter: OpenRouter::new(http.clone(), openrouter_key),
+            http,
+            ml_router_url,
         });
 
     let addr = format!("0.0.0.0:{port}");
