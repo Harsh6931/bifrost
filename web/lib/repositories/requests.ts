@@ -8,40 +8,28 @@ export async function getRequests(
 ): Promise<{ requests: RequestRow[]; total: number }> {
   const sql = getSql();
   const offset = (page - 1) * perPage;
+  const where = modelFilter
+    ? sql`WHERE chosen_model = ${modelFilter}`
+    : sql``;
 
-  const conditions: string[] = [];
-  const params: unknown[] = [];
+  const [countRow] = await sql`SELECT COUNT(*)::int AS total FROM requests ${where}`;
 
-  if (modelFilter) {
-    conditions.push(`chosen_model = $${params.length + 1}`);
-    params.push(modelFilter);
-  }
-
-  const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
-  const [countRow] = await sql.unsafe(
-    `SELECT COUNT(*)::int AS total FROM requests ${whereClause}`,
-    params as any[]
-  );
-
-  const rows = await sql.unsafe(
-    `SELECT * FROM requests ${whereClause}
-     ORDER BY created_at DESC
-     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-    [...params, perPage, offset] as any[]
-  );
+  const rows = await sql`
+    SELECT * FROM requests ${where}
+    ORDER BY created_at DESC
+    LIMIT ${perPage} OFFSET ${offset}
+  `;
 
   return {
-    requests: (rows as any[]).map(mapRequestRow),
-    total: (countRow as any).total as number,
+    requests: rows.map((row) => mapRequestRow(row)),
+    total: Number(countRow?.total) || 0,
   };
 }
 
 export async function getRequestById(id: string): Promise<RequestRow | null> {
   const sql = getSql();
   const [row] = await sql`SELECT * FROM requests WHERE id = ${id}`;
-  return row ? mapRequestRow(row as any) : null;
+  return row ? mapRequestRow(row) : null;
 }
 
 export async function getRequestByHash(
@@ -49,7 +37,7 @@ export async function getRequestByHash(
 ): Promise<RequestRow | null> {
   const sql = getSql();
   const [row] = await sql`SELECT * FROM requests WHERE prompt_hash = ${promptHash} ORDER BY created_at DESC LIMIT 1`;
-  return row ? mapRequestRow(row as any) : null;
+  return row ? mapRequestRow(row) : null;
 }
 
 function mapRequestRow(row: Record<string, unknown>): RequestRow {
