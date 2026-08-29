@@ -47,10 +47,10 @@ Build the dumbest possible version of everything, end to end. **No intelligence 
 - [ ] Get `fastembed` running, embed 100 prompts, confirm shape and timing
 
 **Playground**
-- [ ] Next.js app, Tailwind, shadcn init, layout shell + nav
-- [ ] Playground page: prompt box, mode selector, submit
-- [ ] API route proxying to the gateway (browser never holds the key)
-- [ ] Render the response + chosen model badge
+- [x] Next.js app, Tailwind, shadcn init, layout shell + nav
+- [x] Playground page: prompt box, mode selector, submit
+- [x] API route proxying to the gateway (browser never holds the key)
+- [x] Render the response + chosen model badge
 
 **Dashboard**
 - [ ] DB client + typed queries against `requests`
@@ -85,10 +85,12 @@ Now make it actually route.
 - [ ] Structured request logging
 
 **Playground**
-- [ ] Explanation panel: chosen model, why, neighbor prompts, savings on this call
-- [ ] λ slider calling `/v1/route/preview` on change — decision updates live, no spend
-- [ ] Score comparison view: all candidates with quality/cost/score bars
+- [x] Explanation panel: chosen model, why, neighbor prompts, savings on this call
+- [x] λ slider calling `/v1/route/preview` on change — decision updates live, no spend
+- [x] Score comparison view: all candidates with quality/cost/score bars
 - [ ] Streaming response rendering
+
+Frontend 1 notes: proxy lives at `POST /playground/preview` (and chat at `POST /playground/chat`) so the browser never holds keys. Live λ / explain / scores work against a mock while `BIFROST_MOCK=1`; they will hit gateway `POST /v1/route/preview` when that exists and mock is off. Streaming is still open.
 
 **Dashboard**
 - [ ] Cumulative savings chart (Bifrost vs. always-premium) over time
