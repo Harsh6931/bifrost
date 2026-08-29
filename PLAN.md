@@ -13,15 +13,15 @@ Estimates assume a ~36-hour hackathon. Adjust the multiplier, keep the ordering 
 
 The one phase that has to happen together. Ends when every component can be built without coordination.
 
-- [ ] Agree on the `/route` request + response JSON, paste it into `packages/types`
-- [ ] Create monorepo skeleton with all four directories
+- [x] Agree on the `/route` request + response JSON, paste it into `packages/types`
+- [x] Create monorepo skeleton with all four directories
 - [ ] `docker-compose.yml` with Postgres; confirm all four can connect
-- [ ] Write `migrations/001_init.sql` from §5.6, apply it
-- [ ] Seed `model_registry` with 5–6 models and *current* prices from OpenRouter
+- [x] Write `migrations/001_init.sql` from §5.6, apply it
+- [x] Seed `model_registry` with 5–6 models and *current* prices from OpenRouter
 - [ ] Create OpenRouter account, get key, verify with one curl, put $10 on it
-- [ ] Shared `.env.example`; agree on ports (8080 / 8000 / 3000)
+- [x] Shared `.env.example`; agree on ports (8080 / 8000 / 3000)
 - [ ] Each service returns `200 {"status":"ok"}` on `/health`
-- [ ] Push to GitHub, branch protection off, agree on branch naming
+- [x] Push to GitHub, branch protection off, agree on branch naming
 
 **Exit:** all services boot, DB has tables and seeded models, the contract is agreed.
 
@@ -30,10 +30,10 @@ The one phase that has to happen together. Ends when every component can be buil
 Build the dumbest possible version of everything, end to end. **No intelligence yet.** Nobody optimizes their component until a prompt can travel the whole path and come back.
 
 **Gateway**
-- [ ] axum server, `/health`, tracing subscriber, config from env
-- [ ] `POST /v1/chat/completions` accepting OpenAI's request schema
-- [ ] Bearer token check against a static env var
-- [ ] `LlmProvider` trait + OpenRouter impl (non-streaming first)
+- [x] axum server, `/health`, tracing subscriber, config from env
+- [x] `POST /v1/chat/completions` accepting OpenAI's request schema
+- [x] Bearer token check against a static env var
+- [x] `LlmProvider` trait + OpenRouter impl (non-streaming first)
 - [ ] Call ML `/route`, use `chosen` to pick the model, dispatch
 - [ ] Return an OpenAI-shaped response body
 - [ ] Insert a `requests` row with actual tokens, cost, latency
@@ -53,10 +53,10 @@ Build the dumbest possible version of everything, end to end. **No intelligence 
 - [x] Render the response + chosen model badge
 
 **Dashboard**
-- [ ] DB client + typed queries against `requests`
-- [ ] `/api/stats` returning totals: requests, spend, savings, model mix
-- [ ] Dashboard page with four stat tiles wired to real data
-- [ ] Seed script writing ~200 fake `requests` rows so the UI has something to show
+- [x] DB client + typed queries against `requests`
+- [x] `/api/stats` returning totals: requests, spend, savings, model mix
+- [x] Dashboard page with four stat tiles wired to real data
+- [x] Seed script writing ~200 fake `requests` rows so the UI has something to show
 
 **Exit:** prompt goes in the playground, comes back answered, appears in the dashboard. Ugly is fine.
 
@@ -88,16 +88,16 @@ Now make it actually route.
 - [x] Explanation panel: chosen model, why, neighbor prompts, savings on this call
 - [x] λ slider calling `/v1/route/preview` on change — decision updates live, no spend
 - [x] Score comparison view: all candidates with quality/cost/score bars
-- [ ] Streaming response rendering
+- [x] Streaming response rendering
 
 Frontend 1 notes: proxy lives at `POST /playground/preview` (and chat at `POST /playground/chat`) so the browser never holds keys. Live λ / explain / scores work against a mock while `BIFROST_MOCK=1`; they will hit gateway `POST /v1/route/preview` when that exists and mock is off. Streaming is still open.
 
 **Dashboard**
-- [ ] Cumulative savings chart (Bifrost vs. always-premium) over time
-- [ ] Model distribution chart
-- [ ] Cost/quality scatter, one point per request
-- [ ] Request log table: prompt preview, model, cost, saved, latency; row → explanation
-- [ ] Model registry admin page (toggle enabled, edit prices)
+- [x] Cumulative savings chart (Bifrost vs. always-premium) over time
+- [x] Model distribution chart
+- [x] Cost/quality scatter, one point per request
+- [x] Request log table: prompt preview, model, cost, saved, latency; row → explanation
+- [x] Model registry admin page (toggle enabled, edit prices)
 
 **Exit:** routing is real and measurably saves money; the dashboard proves it with real traffic.
 
