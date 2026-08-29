@@ -73,8 +73,8 @@ export function SavingsChart() {
                 tickFormatter={(value: number) => formatUsd(value)}
               />
               <Tooltip
-                formatter={(value: number | string) => `$${Number(value).toFixed(4)}`}
-                labelFormatter={(label: string) => label}
+                formatter={(value) => `$${Number(value ?? 0).toFixed(4)}`}
+                labelFormatter={(label) => String(label)}
               />
               <Area
                 type="monotone"
