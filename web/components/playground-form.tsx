@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ExplanationPanel } from "@/components/explanation-panel";
 import { ModelBadge } from "@/components/model-badge";
@@ -26,13 +26,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   clampLambda,
   isPolicyMode,
-  MODE_LABEL,
   MODE_LAMBDA,
   nearestMode,
   POLICY_MODES,
   type PolicyMode,
 } from "@/lib/policy";
 import type { PreviewResult } from "@/lib/route-types";
+import { parseSseBlock } from "@/lib/playground-sse";
 
 type ChatResult = {
   chosen: string;
@@ -49,6 +49,7 @@ export function PlaygroundForm() {
   const [result, setResult] = useState<ChatResult | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewPending, setPreviewPending] = useState(false);
+  const streamAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const trimmed = prompt.trim();
@@ -108,36 +109,81 @@ export function PlaygroundForm() {
 
     setError(null);
     setPending(true);
-    setResult(null);
+    streamAbort.current?.abort();
+    const controller = new AbortController();
+    streamAbort.current = controller;
+    setResult({
+      chosen: preview?.chosen ?? "",
+      content: "",
+      mock: Boolean(preview?.mock),
+    });
 
     try {
       const response = await fetch("/playground/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: trimmed, mode, lambda }),
+        signal: controller.signal,
       });
-      const payload: unknown = await response.json().catch(() => null);
-      const record =
-        payload && typeof payload === "object"
-          ? (payload as Record<string, unknown>)
-          : null;
 
-      if (!response.ok) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/event-stream")) {
+        const payload: unknown = await response.json().catch(() => null);
+        const record =
+          payload && typeof payload === "object"
+            ? (payload as Record<string, unknown>)
+            : null;
         const message =
           record && typeof record.error === "string"
             ? record.error
             : `Request failed (${response.status}).`;
         setError(message);
+        setResult(null);
         return;
       }
 
-      const chosen =
-        record && typeof record.chosen === "string" ? record.chosen : "";
-      const content =
-        record && typeof record.content === "string" ? record.content : "";
-      const mock = Boolean(record && record.mock);
-      setResult({ chosen, content, mock });
+      if (!response.ok || !response.body) {
+        setError(`Request failed (${response.status}).`);
+        setResult(null);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let chosen = preview?.chosen ?? "";
+      let mock = Boolean(preview?.mock);
+      let content = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const event = parseSseBlock(part);
+          if (!event) {
+            continue;
+          }
+          if (event.type === "meta") {
+            chosen = event.chosen;
+            mock = event.mock;
+            setResult({ chosen, content, mock });
+          } else if (event.type === "delta") {
+            content += event.content;
+            setResult({ chosen, content, mock });
+          } else if (event.type === "error") {
+            setError(event.error);
+          }
+        }
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Request failed.");
     } finally {
       setPending(false);
@@ -145,13 +191,13 @@ export function PlaygroundForm() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
       <Card>
         <CardHeader>
           <CardTitle>Route a prompt</CardTitle>
           <CardDescription>
-            Drag λ to watch the decision flip. Preview does not call a model
-            (no spend). Submit still spends only when BIFROST_MOCK=0.
+            Drag λ to watch the decision flip. Preview does not call a model.
+            Submit streams the reply into the box below.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -186,14 +232,16 @@ export function PlaygroundForm() {
                 <SelectContent>
                   {POLICY_MODES.map((item) => (
                     <SelectItem key={item} value={item}>
-                      {MODE_LABEL[item]}
+                      {item}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="lambda">λ · {lambda.toFixed(2)} ({mode})</Label>
+              <Label htmlFor="lambda">
+                λ · {lambda.toFixed(2)} ({mode})
+              </Label>
               <Slider
                 id="lambda"
                 min={0}
@@ -215,7 +263,7 @@ export function PlaygroundForm() {
             ) : null}
             <div>
               <Button type="submit" disabled={pending}>
-                {pending ? "Routing…" : "Submit"}
+                {pending ? "Streaming…" : "Submit"}
               </Button>
             </div>
           </form>
@@ -224,6 +272,7 @@ export function PlaygroundForm() {
               <ModelBadge model={result.chosen} mock={result.mock} />
               <pre className="bg-muted max-h-80 overflow-auto rounded-lg p-3 whitespace-pre-wrap text-sm">
                 {result.content}
+                {pending ? "▍" : ""}
               </pre>
             </div>
           ) : null}
