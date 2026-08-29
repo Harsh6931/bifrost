@@ -9,75 +9,62 @@ if (!connectionString) {
 
 const sql = postgres(connectionString);
 
-// ── Model registry seed data ─────────────────────────────────────
+// ── Model registry data (must match migrations/001_init.sql seed) ──
+// The migration already inserts these — this script only reads their
+// prices/latency to generate realistic request rows.
 const MODELS = [
   {
-    id: "openai/gpt-4o",
-    display_name: "GPT-4o",
-    price_in_per_1m: 2.5,
-    price_out_per_1m: 10.0,
-    context_length: 128000,
-    avg_latency_ms: 1800,
-    enabled: true,
+    id: "openai/gpt-5.5",
+    display_name: "GPT-5.5",
+    price_in_per_1m: 5.0,
+    price_out_per_1m: 30.0,
+    context_length: 1050000,
+    avg_latency_ms: 2400,
   },
   {
-    id: "google/gemini-1.5-pro",
-    display_name: "Gemini 1.5 Pro",
-    price_in_per_1m: 1.25,
-    price_out_per_1m: 5.0,
-    context_length: 2000000,
-    avg_latency_ms: 2200,
-    enabled: true,
-  },
-  {
-    id: "anthropic/claude-3-opus",
-    display_name: "Claude 3 Opus",
-    price_in_per_1m: 15.0,
-    price_out_per_1m: 75.0,
-    context_length: 200000,
-    avg_latency_ms: 3500,
-    enabled: true,
-  },
-  {
-    id: "anthropic/claude-3-sonnet",
-    display_name: "Claude 3 Sonnet",
+    id: "anthropic/claude-sonnet-4.6",
+    display_name: "Claude Sonnet 4.6",
     price_in_per_1m: 3.0,
     price_out_per_1m: 15.0,
-    context_length: 200000,
+    context_length: 1000000,
     avg_latency_ms: 2000,
-    enabled: true,
+  },
+  {
+    id: "google/gemini-2.5-pro",
+    display_name: "Gemini 2.5 Pro",
+    price_in_per_1m: 1.25,
+    price_out_per_1m: 10.0,
+    context_length: 1048576,
+    avg_latency_ms: 1900,
   },
   {
     id: "deepseek/deepseek-r1",
     display_name: "DeepSeek R1",
-    price_in_per_1m: 0.55,
-    price_out_per_1m: 2.19,
-    context_length: 128000,
-    avg_latency_ms: 3100,
-    enabled: true,
+    price_in_per_1m: 0.7,
+    price_out_per_1m: 2.5,
+    context_length: 64000,
+    avg_latency_ms: 3400,
   },
   {
-    id: "deepseek/deepseek-v3",
-    display_name: "DeepSeek V3",
-    price_in_per_1m: 0.27,
-    price_out_per_1m: 1.1,
-    context_length: 128000,
-    avg_latency_ms: 2800,
-    enabled: true,
+    id: "openai/gpt-5-mini",
+    display_name: "GPT-5 mini",
+    price_in_per_1m: 0.25,
+    price_out_per_1m: 2.0,
+    context_length: 400000,
+    avg_latency_ms: 1300,
   },
   {
-    id: "google/gemini-flash-1.5",
-    display_name: "Gemini 1.5 Flash",
-    price_in_per_1m: 0.075,
-    price_out_per_1m: 0.3,
+    id: "qwen/qwen3.7-flash",
+    display_name: "Qwen3.7 Flash",
+    price_in_per_1m: 0.03,
+    price_out_per_1m: 0.13,
     context_length: 1000000,
-    avg_latency_ms: 1200,
-    enabled: true,
+    avg_latency_ms: 900,
   },
 ];
 
 const MODEL_IDS = MODELS.map((m) => m.id);
-const BASELINE_MODEL = "openai/gpt-4o";
+const BASELINE_MODEL = "openai/gpt-5.5";
 
 // ── Prompts (varied difficulty) ──────────────────────────────────
 const PROMPTS: Array<{ text: string; difficulty: "easy" | "medium" | "hard" }> = [
@@ -157,31 +144,28 @@ function pickModelForDifficulty(
   // Hard prompts -> premium models more likely
   const weights: Record<string, Record<string, number>> = {
     easy: {
-      "google/gemini-flash-1.5": 0.35,
-      "deepseek/deepseek-v3": 0.3,
+      "qwen/qwen3.7-flash": 0.35,
+      "openai/gpt-5-mini": 0.3,
       "deepseek/deepseek-r1": 0.15,
-      "anthropic/claude-3-sonnet": 0.1,
-      "openai/gpt-4o": 0.05,
-      "google/gemini-1.5-pro": 0.03,
-      "anthropic/claude-3-opus": 0.02,
+      "google/gemini-2.5-pro": 0.1,
+      "anthropic/claude-sonnet-4.6": 0.06,
+      "openai/gpt-5.5": 0.04,
     },
     medium: {
       "deepseek/deepseek-r1": 0.25,
-      "anthropic/claude-3-sonnet": 0.25,
-      "openai/gpt-4o": 0.2,
-      "google/gemini-1.5-pro": 0.15,
-      "deepseek/deepseek-v3": 0.1,
-      "google/gemini-flash-1.5": 0.03,
-      "anthropic/claude-3-opus": 0.02,
+      "anthropic/claude-sonnet-4.6": 0.25,
+      "openai/gpt-5.5": 0.15,
+      "google/gemini-2.5-pro": 0.15,
+      "openai/gpt-5-mini": 0.15,
+      "qwen/qwen3.7-flash": 0.05,
     },
     hard: {
-      "openai/gpt-4o": 0.3,
-      "anthropic/claude-3-opus": 0.25,
-      "google/gemini-1.5-pro": 0.2,
-      "anthropic/claude-3-sonnet": 0.15,
-      "deepseek/deepseek-r1": 0.07,
-      "deepseek/deepseek-v3": 0.02,
-      "google/gemini-flash-1.5": 0.01,
+      "openai/gpt-5.5": 0.3,
+      "anthropic/claude-sonnet-4.6": 0.25,
+      "google/gemini-2.5-pro": 0.2,
+      "deepseek/deepseek-r1": 0.15,
+      "openai/gpt-5-mini": 0.08,
+      "qwen/qwen3.7-flash": 0.02,
     },
   };
 
@@ -198,13 +182,12 @@ function pickModelForDifficulty(
 function getQualityForModel(model: string, difficulty: string): number {
   // Base quality per model, adjusted by difficulty
   const baseQuality: Record<string, number> = {
-    "openai/gpt-4o": 0.94,
-    "anthropic/claude-3-opus": 0.95,
-    "google/gemini-1.5-pro": 0.91,
-    "anthropic/claude-3-sonnet": 0.9,
+    "openai/gpt-5.5": 0.95,
+    "anthropic/claude-sonnet-4.6": 0.92,
+    "google/gemini-2.5-pro": 0.91,
     "deepseek/deepseek-r1": 0.88,
-    "deepseek/deepseek-v3": 0.85,
-    "google/gemini-flash-1.5": 0.82,
+    "openai/gpt-5-mini": 0.85,
+    "qwen/qwen3.7-flash": 0.8,
   };
 
   const base = baseQuality[model] ?? 0.8;
@@ -214,14 +197,14 @@ function getQualityForModel(model: string, difficulty: string): number {
   const difficultyPenalty: Record<string, Record<string, number>> = {
     easy: {},
     medium: {
-      "google/gemini-flash-1.5": -0.08,
-      "deepseek/deepseek-v3": -0.04,
+      "qwen/qwen3.7-flash": -0.08,
+      "openai/gpt-5-mini": -0.04,
     },
     hard: {
-      "google/gemini-flash-1.5": -0.2,
-      "deepseek/deepseek-v3": -0.12,
+      "qwen/qwen3.7-flash": -0.2,
+      "openai/gpt-5-mini": -0.12,
       "deepseek/deepseek-r1": -0.06,
-      "anthropic/claude-3-sonnet": -0.03,
+      "google/gemini-2.5-pro": -0.03,
     },
   };
 
@@ -283,22 +266,9 @@ function generateExplanation(
 
 // ── Main seed ────────────────────────────────────────────────────
 async function seed() {
-  console.log("Seeding model_registry...");
-
-  for (const model of MODELS) {
-    await sql`
-      INSERT INTO model_registry (id, display_name, price_in_per_1m, price_out_per_1m, context_length, avg_latency_ms, enabled)
-      VALUES (${model.id}, ${model.display_name}, ${model.price_in_per_1m}, ${model.price_out_per_1m}, ${model.context_length}, ${model.avg_latency_ms}, ${model.enabled})
-      ON CONFLICT (id) DO UPDATE SET
-        display_name = EXCLUDED.display_name,
-        price_in_per_1m = EXCLUDED.price_in_per_1m,
-        price_out_per_1m = EXCLUDED.price_out_per_1m,
-        context_length = EXCLUDED.context_length,
-        avg_latency_ms = EXCLUDED.avg_latency_ms,
-        enabled = EXCLUDED.enabled
-    `;
-  }
-  console.log(`  Upserted ${MODELS.length} models.`);
+  // model_registry is seeded by migrations/001_init.sql on first boot —
+  // do not upsert here or we'd overwrite admin-toggled enabled flags.
+  console.log("Assuming model_registry is seeded (migrations/001_init.sql)...");
 
   console.log("Seeding requests...");
 
