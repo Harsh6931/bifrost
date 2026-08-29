@@ -10,6 +10,8 @@ export type {
   RequestRow,
   StatsResponse,
   ModelMixEntry,
+  TimeseriesPoint,
+  StatsTimeseriesResponse,
   RequestListResponse,
   ModelListResponse,
   UpdateModelBody,
