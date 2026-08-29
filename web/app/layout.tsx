@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bifrost",
-  description: "Intelligent LLM router — cheapest model that still answers well.",
+  title: "Bifrost — Intelligent LLM Router",
+  description: "Route prompts to the cheapest model that still answers well.",
 };
 
 export default function RootLayout({
