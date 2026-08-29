@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ModelBadge } from "@/components/model-badge";
 import {
   isPolicyMode,
   MODE_LABEL,
@@ -147,13 +148,7 @@ export function PlaygroundForm() {
         </form>
         {result ? (
           <div className="mt-4 space-y-2">
-            <p className="text-sm">
-              <span className="text-muted-foreground">Model · </span>
-              {result.chosen}
-              {result.mock ? (
-                <span className="text-muted-foreground"> (mock)</span>
-              ) : null}
-            </p>
+            <ModelBadge model={result.chosen} mock={result.mock} />
             <pre className="bg-muted max-h-80 overflow-auto rounded-lg p-3 whitespace-pre-wrap text-sm">
               {result.content}
             </pre>
