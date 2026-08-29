@@ -9,9 +9,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useApiData } from "@/hooks/use-api-data";
+import { demoModels } from "@/lib/demo-data";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import type { ModelListResponse, ModelRegistryRow } from "@/lib/types";
-import { WidgetError, WidgetSkeleton } from "@/components/dashboard/widget-states";
+import { WidgetSkeleton } from "@/components/dashboard/widget-states";
 
 interface PriceDraft {
   price_in_per_1m: string;
@@ -26,8 +27,10 @@ function draftFromModel(model: ModelRegistryRow): PriceDraft {
 }
 
 export function ModelRegistryTable() {
-  const { data, error, loading, refetch } = useApiData<ModelListResponse>(
-    "/api/models?include_disabled=true"
+  const { data, loading, refetch, isDemo } = useDashboardData<ModelListResponse>(
+    "/api/models?include_disabled=true",
+    demoModels,
+    (payload) => payload.models.length === 0,
   );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -113,19 +116,18 @@ export function ModelRegistryTable() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {loading ? (
+        {loading || !data ? (
           <WidgetSkeleton height={240} />
-        ) : error ? (
-          <WidgetError message={error} onRetry={refetch} />
-        ) : !data || data.models.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No models registered yet.
-          </p>
         ) : (
           <div className="space-y-3">
             {actionError ? (
               <p className="text-destructive text-xs" role="alert">
                 {actionError}
+              </p>
+            ) : null}
+            {isDemo ? (
+              <p className="text-xs text-muted-foreground">
+                Showing the seed registry. Editing needs the database running.
               </p>
             ) : null}
             <div className="overflow-x-auto">
@@ -223,7 +225,7 @@ export function ModelRegistryTable() {
                                 <Button
                                   variant="outline"
                                   size="xs"
-                                  disabled={isBusy || !model.enabled}
+                                  disabled={isBusy || isDemo || !model.enabled}
                                   onClick={() => startEditing(model)}
                                 >
                                   Edit prices
@@ -231,7 +233,7 @@ export function ModelRegistryTable() {
                                 <Button
                                   variant={model.enabled ? "destructive" : "default"}
                                   size="xs"
-                                  disabled={isBusy}
+                                  disabled={isBusy || isDemo}
                                   onClick={() => toggleEnabled(model)}
                                 >
                                   {isBusy
