@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const perPage = Math.min(
-    100,
+    500,
     Math.max(1, parseInt(searchParams.get("per_page") ?? "50", 10))
   );
   const modelFilter = searchParams.get("model") ?? undefined;
