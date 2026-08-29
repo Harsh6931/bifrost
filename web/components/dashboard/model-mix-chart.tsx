@@ -63,8 +63,8 @@ export function ModelMixChart() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number | string, name: unknown) => [
-                    `${Number(value).toLocaleString()} requests`,
+                  formatter={(value, name) => [
+                    `${Number(value ?? 0).toLocaleString()} requests`,
                     String(name),
                   ]}
                 />
