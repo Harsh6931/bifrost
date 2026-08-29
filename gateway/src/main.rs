@@ -1,9 +1,13 @@
 mod auth;
+mod cache;
 mod chat;
+mod db;
 mod error;
 mod openai;
 mod providers;
+mod telemetry;
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use axum::routing::{get, post};
@@ -11,15 +15,20 @@ use axum::{Json, Router};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 
+use crate::cache::ResponseCache;
 use crate::providers::openrouter::OpenRouter;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub api_key: String,
     pub default_model: String,
+    pub baseline_model: String,
     pub openrouter: OpenRouter,
     pub http: reqwest::Client,
     pub ml_router_url: String,
+    pub db: Option<sqlx::PgPool>,
+    pub cache: ResponseCache,
+    pub prices: HashMap<String, db::ModelPrice>,
 }
 
 #[tokio::main]
@@ -44,15 +53,26 @@ async fn main() {
     let api_key = std::env::var("BIFROST_API_KEY").unwrap_or_else(|_| "dev-local-key".into());
     let default_model =
         std::env::var("DEFAULT_MODEL").unwrap_or_else(|_| "openai/gpt-5-mini".into());
+    let baseline_model =
+        std::env::var("BASELINE_MODEL").unwrap_or_else(|_| "openai/gpt-5.5".into());
     let openrouter_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
-    
+
     let ml_router_url = std::env::var("ML_ROUTER_URL")
+        .or_else(|_| std::env::var("ML_SERVICE_URL"))
         .unwrap_or_else(|_| "http://localhost:8000".into());
 
     let http = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
         .expect("http client");
+
+    let db = db::connect().await;
+    let prices = if let Some(pool) = &db {
+        db::load_prices(pool).await
+    } else {
+        HashMap::new()
+    };
+    let cache = ResponseCache::new(db.clone());
 
     let app = Router::new()
         .route("/health", get(health))
@@ -62,9 +82,13 @@ async fn main() {
         .with_state(AppState {
             api_key,
             default_model,
+            baseline_model,
             openrouter: OpenRouter::new(http.clone(), openrouter_key),
             http,
             ml_router_url,
+            db,
+            cache,
+            prices,
         });
 
     let addr = format!("0.0.0.0:{port}");
