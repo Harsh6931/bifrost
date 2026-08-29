@@ -122,9 +122,9 @@ export async function POST(request: Request) {
     const raw: unknown = await upstream.json().catch(() => null);
     const detail =
       raw &&
-      typeof raw === "object" &&
-      "error" in raw &&
-      typeof (raw as { error: unknown }).error === "string"
+        typeof raw === "object" &&
+        "error" in raw &&
+        typeof (raw as { error: unknown }).error === "string"
         ? (raw as { error: string }).error
         : `Gateway returned ${upstream.status}.`;
     return NextResponse.json({ error: detail }, { status: 502 });
