@@ -1,28 +1,46 @@
 import { NextResponse } from "next/server";
 
-import { isPolicyMode, MODE_LAMBDA } from "@/lib/policy";
+import { clampLambda, isPolicyMode, MODE_LAMBDA } from "@/lib/policy";
+import {
+  chunkText,
+  encodeSse,
+  type ChatStreamEvent,
+} from "@/lib/playground-sse";
 
 const MOCK_MODEL = "qwen/qwen3.7-flash";
 
 type ChatRequestBody = {
   prompt?: unknown;
   mode?: unknown;
+  lambda?: unknown;
 };
 
-function mockCompletion(prompt: string, mode: string) {
-  const content = [
+function mockText(prompt: string, mode: string, lambda: number) {
+  return [
     `[mock · ${MOCK_MODEL}]`,
-    `Mode: ${mode} (λ ${MODE_LAMBDA[mode as keyof typeof MODE_LAMBDA]}).`,
-    "Gateway is not in this request. Set BIFROST_MOCK=0 in web/.env.local when /v1/chat/completions is up.",
+    `Mode: ${mode} (λ ${lambda.toFixed(2)}).`,
+    "Streaming a fake reply. Set BIFROST_MOCK=0 when the gateway streams.",
     "",
     `Echo: ${prompt.slice(0, 280)}`,
   ].join("\n");
+}
 
-  return {
-    chosen: MOCK_MODEL,
-    content,
-    mock: true,
-  };
+function sseResponse(stream: ReadableStream<Uint8Array>) {
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+function pushEvent(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  event: ChatStreamEvent,
+) {
+  controller.enqueue(encoder.encode(encodeSse(event)));
 }
 
 export async function POST(request: Request) {
@@ -42,11 +60,29 @@ export async function POST(request: Request) {
   }
 
   const mode = body.mode;
-  const lambda = MODE_LAMBDA[mode];
+  const lambda =
+    typeof body.lambda === "number" ? clampLambda(body.lambda) : MODE_LAMBDA[mode];
   const useMock = process.env.BIFROST_MOCK !== "0";
+  const encoder = new TextEncoder();
 
   if (useMock) {
-    return NextResponse.json(mockCompletion(prompt, mode));
+    const text = mockText(prompt, mode, lambda);
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        pushEvent(controller, encoder, {
+          type: "meta",
+          chosen: MOCK_MODEL,
+          mock: true,
+        });
+        for (const chunk of chunkText(text)) {
+          pushEvent(controller, encoder, { type: "delta", content: chunk });
+          await new Promise((resolve) => setTimeout(resolve, 18));
+        }
+        pushEvent(controller, encoder, { type: "done" });
+        controller.close();
+      },
+    });
+    return sseResponse(stream);
   }
 
   const gatewayUrl = process.env.GATEWAY_URL;
@@ -70,9 +106,9 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: "unused",
+        stream: true,
         messages: [{ role: "user", content: prompt }],
       }),
-      signal: AbortSignal.timeout(60_000),
     });
   } catch (error) {
     const message =
@@ -80,8 +116,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const raw: unknown = await upstream.json().catch(() => null);
+  const contentType = upstream.headers.get("content-type") ?? "";
+
   if (!upstream.ok) {
+    const raw: unknown = await upstream.json().catch(() => null);
     const detail =
       raw &&
       typeof raw === "object" &&
@@ -92,15 +130,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: detail }, { status: 502 });
   }
 
+  if (contentType.includes("text/event-stream") && upstream.body) {
+    return sseResponse(relayOpenAiStream(upstream.body, encoder));
+  }
+
+  const raw: unknown = await upstream.json().catch(() => null);
   const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const chosen =
     typeof record.model === "string" && record.model.length > 0
       ? record.model
       : "unknown";
   const choices = Array.isArray(record.choices) ? record.choices : [];
-  const first = choices[0] && typeof choices[0] === "object"
-    ? (choices[0] as Record<string, unknown>)
-    : null;
+  const first =
+    choices[0] && typeof choices[0] === "object"
+      ? (choices[0] as Record<string, unknown>)
+      : null;
   const message =
     first && typeof first.message === "object" && first.message !== null
       ? (first.message as Record<string, unknown>)
@@ -108,9 +152,95 @@ export async function POST(request: Request) {
   const content =
     message && typeof message.content === "string" ? message.content : "";
 
-  return NextResponse.json({
-    chosen,
-    content,
-    mock: false,
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      pushEvent(controller, encoder, { type: "meta", chosen, mock: false });
+      if (content) {
+        pushEvent(controller, encoder, { type: "delta", content });
+      }
+      pushEvent(controller, encoder, { type: "done" });
+      controller.close();
+    },
+  });
+  return sseResponse(stream);
+}
+
+function relayOpenAiStream(
+  body: ReadableStream<Uint8Array>,
+  encoder: TextEncoder,
+): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let sentMeta = false;
+
+      const send = (event: ChatStreamEvent) => {
+        pushEvent(controller, encoder, event);
+      };
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? "";
+          for (const part of parts) {
+            const line = part
+              .split("\n")
+              .map((row) => row.trimEnd())
+              .find((row) => row.startsWith("data:"));
+            if (!line) {
+              continue;
+            }
+            const payload = line.slice(5).trim();
+            if (!payload || payload === "[DONE]") {
+              continue;
+            }
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(payload);
+            } catch {
+              continue;
+            }
+            if (!parsed || typeof parsed !== "object") {
+              continue;
+            }
+            const record = parsed as Record<string, unknown>;
+            if (!sentMeta && typeof record.model === "string" && record.model) {
+              send({ type: "meta", chosen: record.model, mock: false });
+              sentMeta = true;
+            }
+            const choices = Array.isArray(record.choices) ? record.choices : [];
+            const first =
+              choices[0] && typeof choices[0] === "object"
+                ? (choices[0] as Record<string, unknown>)
+                : null;
+            const delta =
+              first && typeof first.delta === "object" && first.delta !== null
+                ? (first.delta as Record<string, unknown>)
+                : null;
+            const token = delta && typeof delta.content === "string" ? delta.content : "";
+            if (token) {
+              send({ type: "delta", content: token });
+            }
+          }
+        }
+        if (!sentMeta) {
+          send({ type: "meta", chosen: "unknown", mock: false });
+        }
+        send({ type: "done" });
+        controller.close();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Stream failed.";
+        send({ type: "error", error: message });
+        controller.close();
+      }
+    },
   });
 }
