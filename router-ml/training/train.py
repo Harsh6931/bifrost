@@ -28,10 +28,13 @@ def main():
     
     # We want to embed the unique prompts to prevent duplicating embedding work.
     print(f"Total rows in train split: {len(df)}")
-    df_unique = df.drop_duplicates(subset=["prompt"]).copy().reset_index(drop=True)
+    df_unique = df.drop_duplicates(subset=["prompt"]).copy()
     
-    # For hackathon/speed purposes, limit the training corpus size (default: 300 samples)
-    MAX_CORPUS_SIZE = int(os.environ.get("MAX_CORPUS_SIZE", 300))
+    # Shuffle deterministically to get a balanced mix of English math/coding/reasoning and other categories
+    df_unique = df_unique.sample(frac=1, random_state=42).reset_index(drop=True)
+    
+    # For hackathon/speed purposes, limit the training corpus size (default: 1000 samples)
+    MAX_CORPUS_SIZE = int(os.environ.get("MAX_CORPUS_SIZE", 1000))
     if len(df_unique) > MAX_CORPUS_SIZE:
         print(f"Limiting training corpus from {len(df_unique)} to {MAX_CORPUS_SIZE} for faster embedding generation.")
         df_unique = df_unique.iloc[:MAX_CORPUS_SIZE].copy().reset_index(drop=True)
