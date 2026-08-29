@@ -1,5 +1,6 @@
 # Internal working docs — not for the public repo
 PLAN.md
+one-commit-per-file.mdc
 
 # Env & secrets
 .env
