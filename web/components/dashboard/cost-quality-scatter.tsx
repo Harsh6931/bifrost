@@ -86,10 +86,10 @@ export function CostQualityScatter() {
               <ZAxis range={[28, 28]} />
               <Tooltip
                 cursor={{ strokeDasharray: "3 3" }}
-                formatter={(value: number | string, name: unknown) =>
+                formatter={(value, name) =>
                   name === "Cost"
-                    ? [`$${Number(value).toFixed(4)}`, name]
-                    : [Number(value).toFixed(2), name]
+                    ? [`$${Number(value ?? 0).toFixed(4)}`, String(name)]
+                    : [Number(value ?? 0).toFixed(2), String(name)]
                 }
                 labelFormatter={() => ""}
               />
