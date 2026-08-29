@@ -15,12 +15,12 @@ The one phase that has to happen together. Ends when every component can be buil
 
 - [x] Agree on the `/route` request + response JSON, paste it into `packages/types`
 - [x] Create monorepo skeleton with all four directories
-- [ ] `docker-compose.yml` with Postgres; confirm all four can connect
+- [x] `docker-compose.yml` with Postgres; confirm all four can connect
 - [x] Write `migrations/001_init.sql` from §5.6, apply it
 - [x] Seed `model_registry` with 5–6 models and *current* prices from OpenRouter
-- [ ] Create OpenRouter account, get key, verify with one curl, put $10 on it
+- [x] Create OpenRouter account, get key, verify with one curl, put $10 on it
 - [x] Shared `.env.example`; agree on ports (8080 / 8000 / 3000)
-- [ ] Each service returns `200 {"status":"ok"}` on `/health`
+- [x] Each service returns `200 {"status":"ok"}` on `/health`
 - [x] Push to GitHub, branch protection off, agree on branch naming
 
 **Exit:** all services boot, DB has tables and seeded models, the contract is agreed.
@@ -34,17 +34,17 @@ Build the dumbest possible version of everything, end to end. **No intelligence 
 - [x] `POST /v1/chat/completions` accepting OpenAI's request schema
 - [x] Bearer token check against a static env var
 - [x] `LlmProvider` trait + OpenRouter impl (non-streaming first)
-- [ ] Call ML `/route`, use `chosen` to pick the model, dispatch
-- [ ] Return an OpenAI-shaped response body
-- [ ] Insert a `requests` row with actual tokens, cost, latency
-- [ ] **Verify: `openai` Python SDK works against it with only `base_url` changed**
+- [x] Call ML `/route`, use `chosen` to pick the model, dispatch
+- [x] Return an OpenAI-shaped response body
+- [x] Insert a `requests` row with actual tokens, cost, latency
+- [x] **Verify: `openai` Python SDK works against it with only `base_url` changed**
 
 **Router ML**
-- [ ] FastAPI skeleton, `/health`, `/route` matching the contract
-- [ ] Stub `/route`: return cheapest enabled model, `pred_quality: 0.5`, fake explanation
-- [ ] Download RouterBench, open it in a notebook, document the real schema
-- [ ] Write the loader → normalized `(prompt, model, quality, cost)` table
-- [ ] Get `fastembed` running, embed 100 prompts, confirm shape and timing
+- [x] FastAPI skeleton, `/health`, `/route` matching the contract
+- [x] Stub `/route`: return cheapest enabled model, `pred_quality: 0.5`, fake explanation
+- [x] Download RouterBench, open it in a notebook, document the real schema
+- [x] Write the loader → normalized `(prompt, model, quality, cost)` table
+- [x] Get `fastembed` running, embed 100 prompts, confirm shape and timing
 
 **Playground**
 - [x] Next.js app, Tailwind, shadcn init, layout shell + nav
@@ -65,24 +65,24 @@ Build the dumbest possible version of everything, end to end. **No intelligence 
 Now make it actually route.
 
 **Router ML** (heaviest workstream this phase)
-- [ ] Embed the full corpus, persist as `.npy` + id index
-- [ ] Implement k-NN: cosine over the in-memory matrix, top-k, per-model quality average
-- [ ] Load prices from `model_registry`, implement `cost(m)`
-- [ ] Token estimator for `est_in_tok` / `est_out_tok` (tiktoken is fine)
-- [ ] Implement the §5.3 composite score with λ and hard filters
-- [ ] Build the `explanation` payload with real neighbor prompts + the summary sentence
-- [ ] Replace the stub `/route` with the real path; confirm < 50ms
-- [ ] Held-out eval: cost reduction % and quality retention % vs. always-premium
-- [ ] **Write those two numbers down — they go on the demo slide**
+- [x] Embed the full corpus, persist as `.npy` + id index
+- [x] Implement k-NN: cosine over the in-memory matrix, top-k, per-model quality average
+- [x] Load prices from `model_registry`, implement `cost(m)`
+- [x] Token estimator for `est_in_tok` / `est_out_tok` (tiktoken is fine)
+- [x] Implement the §5.3 composite score with λ and hard filters
+- [x] Build the `explanation` payload with real neighbor prompts + the summary sentence
+- [x] Replace the stub `/route` with the real path; confirm < 50ms
+- [x] Held-out eval: cost reduction % and quality retention % vs. always-premium
+- [x] **Write those two numbers down — they go on the demo slide**
 
 **Gateway**
 - [ ] SSE streaming passthrough from OpenRouter to client
 - [ ] Exact-match response cache (hash prompt+policy), record `cache_hit`
 - [ ] Compute and store `baseline_cost_usd` + `savings_usd` per request
-- [ ] `POST /v1/route/preview` — decide without dispatching
+- [x] `POST /v1/route/preview` — decide without dispatching
 - [ ] `GET /v1/route/explain?request_id=`
-- [ ] Graceful degradation: if the ML service is down, route to a default model and log it
-- [ ] Structured request logging
+- [x] Graceful degradation: if the ML service is down, route to a default model and log it
+- [x] Structured request logging
 
 **Playground**
 - [x] Explanation panel: chosen model, why, neighbor prompts, savings on this call
@@ -113,7 +113,7 @@ Frontend 1 notes: proxy lives at `POST /playground/preview` (and chat at `POST /
 - [ ] Refresh `model_registry` prices the night before
 - [ ] **Replay mode:** replay logged request/response pairs if the network dies on stage
 - [ ] Pre-warm the cache with the exact demo prompts
-- [ ] README with architecture diagram + setup
+- [x] README with architecture diagram + setup
 - [ ] Write and rehearse the 3-minute script below, twice, timed
 
 **Demo script**
