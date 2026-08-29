@@ -1,19 +1,21 @@
 import type { ModelRegistryRow } from "@/lib/types";
 import { getSql } from "@/lib/db";
 
+type SqlClient = ReturnType<typeof getSql>;
+type Fragment = ReturnType<SqlClient>;
+
 export async function getModels(
   includeDisabled = false
 ): Promise<ModelRegistryRow[]> {
   const sql = getSql();
   if (includeDisabled) {
-    const rows =
-      await sql`SELECT * FROM model_registry ORDER BY display_name`;
-    return (rows as any[]).map(mapModelRow);
+    const rows = await sql`SELECT * FROM model_registry ORDER BY display_name`;
+    return rows.map((row) => mapModelRow(row));
   }
 
   const rows =
     await sql`SELECT * FROM model_registry WHERE enabled = true ORDER BY display_name`;
-  return (rows as any[]).map(mapModelRow);
+  return rows.map((row) => mapModelRow(row));
 }
 
 export async function getModelById(
@@ -21,7 +23,18 @@ export async function getModelById(
 ): Promise<ModelRegistryRow | null> {
   const sql = getSql();
   const [row] = await sql`SELECT * FROM model_registry WHERE id = ${id}`;
-  return row ? mapModelRow(row as any) : null;
+  return row ? mapModelRow(row) : null;
+}
+
+function combineFragments(parts: Fragment[], separator: string): Fragment {
+  const sql = getSql();
+  let clause = parts[0];
+  for (const part of parts.slice(1)) {
+    clause = separator === ", "
+      ? sql`${clause}, ${part}`
+      : sql`${clause} AND ${part}`;
+  }
+  return clause;
 }
 
 export async function updateModel(
@@ -34,35 +47,27 @@ export async function updateModel(
   }
 ): Promise<ModelRegistryRow | null> {
   const sql = getSql();
-  const setClauses: string[] = [];
-  const params: unknown[] = [];
+  const sets: Fragment[] = [];
 
   if (updates.enabled !== undefined) {
-    setClauses.push(`enabled = $${params.length + 1}`);
-    params.push(updates.enabled);
+    sets.push(sql`enabled = ${updates.enabled}`);
   }
   if (updates.price_in_per_1m !== undefined) {
-    setClauses.push(`price_in_per_1m = $${params.length + 1}`);
-    params.push(updates.price_in_per_1m);
+    sets.push(sql`price_in_per_1m = ${updates.price_in_per_1m}`);
   }
   if (updates.price_out_per_1m !== undefined) {
-    setClauses.push(`price_out_per_1m = $${params.length + 1}`);
-    params.push(updates.price_out_per_1m);
+    sets.push(sql`price_out_per_1m = ${updates.price_out_per_1m}`);
   }
   if (updates.display_name !== undefined) {
-    setClauses.push(`display_name = $${params.length + 1}`);
-    params.push(updates.display_name);
+    sets.push(sql`display_name = ${updates.display_name}`);
   }
 
-  if (setClauses.length === 0) return getModelById(id);
+  if (sets.length === 0) return getModelById(id);
 
-  params.push(id);
-  const [row] = await sql.unsafe(
-    `UPDATE model_registry SET ${setClauses.join(", ")} WHERE id = $${params.length} RETURNING *`,
-    params as any[]
-  );
+  const setClause = combineFragments(sets, ", ");
+  const [row] = await sql`UPDATE model_registry SET ${setClause} WHERE id = ${id} RETURNING *`;
 
-  return row ? mapModelRow(row as any) : null;
+  return row ? mapModelRow(row) : null;
 }
 
 export async function createModel(
@@ -81,7 +86,7 @@ export async function createModel(
       enabled = EXCLUDED.enabled
     RETURNING *
   `;
-  return mapModelRow(row as any);
+  return mapModelRow(row);
 }
 
 function mapModelRow(row: Record<string, unknown>): ModelRegistryRow {
