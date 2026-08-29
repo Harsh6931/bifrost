@@ -19,7 +19,7 @@ export function AppNav() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <Link
           href="/playground"
-          className="font-serif text-lg font-semibold tracking-tight"
+          className="font-sans text-lg font-semibold tracking-tight"
         >
           Bifrost
         </Link>
