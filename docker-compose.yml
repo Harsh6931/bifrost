@@ -1,6 +1,8 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: bifrost-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: bifrost
       POSTGRES_PASSWORD: bifrost
@@ -9,12 +11,13 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      # every .sql here runs automatically on first boot
+      - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bifrost"]
+      test: ["CMD-SHELL", "pg_isready -U bifrost -d bifrost"]
       interval: 5s
-      timeout: 5s
-      retries: 5
+      timeout: 3s
+      retries: 10
 
 volumes:
   pgdata:
