@@ -1,16 +1,19 @@
 "use client";
 
-import { useApiData } from "@/hooks/use-api-data";
+import { demoStats } from "@/lib/demo-data";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import type { StatsResponse } from "@/lib/types";
 import { StatTile } from "@/components/dashboard/stat-tile";
-import { WidgetEmpty, WidgetError, WidgetSkeleton } from "@/components/dashboard/widget-states";
+import { WidgetSkeleton } from "@/components/dashboard/widget-states";
 
 export function StatsTiles() {
-  const { data, error, loading, refetch } = useApiData<StatsResponse>(
-    "/api/stats"
+  const { data, loading } = useDashboardData<StatsResponse>(
+    "/api/stats",
+    demoStats,
+    (stats) => stats.total_requests === 0,
   );
 
-  if (loading) {
+  if (loading || !data) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
@@ -20,48 +23,39 @@ export function StatsTiles() {
     );
   }
 
-  if (error) {
-    return <WidgetError message={error} onRetry={refetch} />;
-  }
-
-  if (!data || data.total_requests === 0) {
-    return (
-      <WidgetEmpty hint="No routed requests yet. Run npm run seed or send traffic through the gateway." />
-    );
-  }
-
   const tiles = [
     {
-      title: "Requests",
+      title: "Requests routed",
       value: data.total_requests.toLocaleString(),
       hint: `${(data.cache_hit_rate * 100).toFixed(1)}% served from cache`,
+      accent: "var(--chart-1)",
     },
     {
-      title: "Spend",
-      value: `$${data.total_spend_usd.toFixed(4)}`,
-      hint: "actual cost of routed calls",
+      title: "Actual spend",
+      value: `$${data.total_spend_usd.toFixed(2)}`,
+      hint: `vs $${data.total_baseline_usd.toFixed(2)} always-premium`,
+      accent: "var(--chart-4)",
     },
     {
-      title: "Saved vs baseline",
-      value: `$${data.total_savings_usd.toFixed(4)}`,
-      hint: `baseline spend $${data.total_baseline_usd.toFixed(4)}`,
+      title: "Saved",
+      value: `$${data.total_savings_usd.toFixed(2)}`,
+      hint: "kept out of the bill",
+      accent: "var(--chart-bifrost)",
+      emphasis: true,
     },
     {
-      title: "Avg savings",
+      title: "Cost reduction",
       value: `${(data.avg_savings_pct * 100).toFixed(1)}%`,
-      hint: "per request vs always-premium",
+      hint: "against always-premium routing",
+      accent: "var(--chart-bifrost)",
+      emphasis: true,
     },
   ];
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {tiles.map((tile) => (
-        <StatTile
-          key={tile.title}
-          title={tile.title}
-          value={tile.value}
-          hint={tile.hint}
-        />
+        <StatTile key={tile.title} {...tile} />
       ))}
     </div>
   );
