@@ -47,14 +47,8 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   }
 
-  const gatewayUrl = process.env.GATEWAY_URL;
-  const apiKey = process.env.BIFROST_API_KEY;
-  if (!gatewayUrl || !apiKey) {
-    return NextResponse.json(
-      { error: "GATEWAY_URL and BIFROST_API_KEY must be set." },
-      { status: 500 },
-    );
-  }
+  // Determine Python ML router URL
+  const mlRouterUrl = process.env.ML_ROUTER_URL || "http://127.0.0.1:8000";
 
   const mode = isPolicyMode(body.mode)
     ? body.mode
@@ -66,28 +60,35 @@ export async function POST(request: Request) {
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${gatewayUrl.replace(/\/$/, "")}/v1/route/preview`, {
+    upstream = await fetch(`${mlRouterUrl.replace(/\/$/, "")}/route`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         prompt,
+        candidates: [
+          "openai/gpt-5.5",
+          "anthropic/claude-sonnet-4.6",
+          "google/gemini-2.5-pro",
+          "deepseek/deepseek-r1",
+          "openai/gpt-5-mini",
+          "qwen/qwen3.7-flash"
+        ],
         policy: { mode, lambda, max_cost_usd: 0.05 },
       }),
       signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Preview request failed.";
+      error instanceof Error ? error.message : "ML Router request failed.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
   const raw: unknown = await upstream.json().catch(() => null);
   if (!upstream.ok) {
     return NextResponse.json(
-      { error: `Gateway preview returned ${upstream.status}.` },
+      { error: `ML Router returned status ${upstream.status}.` },
       { status: 502 },
     );
   }
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
   const parsed = asRouteResponse(raw);
   if (!parsed) {
     return NextResponse.json(
-      { error: "Gateway preview payload was invalid." },
+      { error: "ML Router payload was invalid." },
       { status: 502 },
     );
   }
